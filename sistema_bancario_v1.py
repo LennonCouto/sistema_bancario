@@ -22,6 +22,9 @@ def menu():
     4 - Sair
     """
     print(menu.center(5))
+    escolha = input("Escolha uma opção:")
+
+    return escolha
 
 #Função de SACAR
 def sacar(saldo, limite_diario, extrato_bancario):
@@ -53,7 +56,7 @@ def sacar(saldo, limite_diario, extrato_bancario):
     return saldo, limite_diario, extrato_bancario
 
 #Função de DEPOSITO
-def depositar(saldo, extrato_bancario):
+def depositar(saldo, extrato_bancario, /):
     while True:
         try:
             deposito = float(input("Valor de deposito: R$"))
@@ -84,9 +87,8 @@ def extrato(saldo, extrato_bancario):
 
 #LOOP PRINCIPAL
 while True:
-    menu()
+    escolha = menu()
 
-    escolha = input("Escolha uma opção:")
     if escolha == "1":
         saldo, limite_diario, extrato_bancario = sacar(saldo, limite_diario, extrato_bancario)
 
