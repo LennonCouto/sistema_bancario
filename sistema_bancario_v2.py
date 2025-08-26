@@ -75,7 +75,7 @@ def criar_conta(AGENCIA, numero_conta, contas, users):
             contas.append(conta)
             print("Conta criada com sucesso.")
             pausar()
-            return int(numero_conta) + 1
+            return int(numero_conta) + 1 
     print("Usuário não encontrato. Cadastre-se primeiro")
     pausar()
     return numero_conta
