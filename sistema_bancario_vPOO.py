@@ -1,5 +1,8 @@
 from abc import ABC, abstractclassmethod, abstractproperty
 from mensagens import Mensagens
+from datetime import datetime
+import functools
+
 
 class Cliente:
     def __init__(self, endereco):
@@ -7,7 +10,14 @@ class Cliente:
         self.contas = []
 
     def realizar_transacao(self, conta, transacao):
+        #Verifica limite diario
+        if conta.historico.transacoes_hoje() >= 10:
+            Mensagens.exibir("Limite diário de 10 transações atingido!", titulo="AVISO")
+            return False
+
+        #Se ainda não estourou o limite, tenta registrar a transação
         transacao.registrar(conta)
+        return True
 
     def adicionar_conta(self, conta):
         self.contas.append(conta)
@@ -72,34 +82,24 @@ class Conta:
     def depositar(self, valor):
         if valor > 0:
             self._saldo += valor
+            Mensagens.exibir(f"Deposito de R${valor:.2f} realizado!", titulo ="SUCESSO")
+            return True
         else:
             print("Operação falhou, Valor informado invalido!")
             return False
 
-        return True
-
 
 class ContaCorrente(Conta):
-    def __init__(self, numero, cliente, limite = 500, limite_saque = 3):
+    def __init__(self, numero, cliente, limite = 500):
         super().__init__(numero, cliente)
         self.limite = limite
-        self.limite_saque = limite_saque
 
     def sacar(self, valor):
-        numero_saque = len([transacao for transacao in self.historico.
-        transacoes if transacao["tipo"] == Saque.
-        __name__]
-        )
-
+        # Verifica se excedeu o limite de quantidade de valor
         excedeu_limite = valor > self.limite
-        excedeu_saque = numero_saque >= self.limite_saque
 
         if excedeu_limite:
             Mensagens.exibir("Valor acima do limite permitido de R$500", titulo="ERRO")
-            return False
-
-        if excedeu_saque:
-            Mensagens.exibir("Limite de saque diario atingido", titulo= "ERRO")
             return False
 
         super().sacar(valor)
@@ -123,16 +123,22 @@ class Historico:
     def transacoes(self):
         return self._transacoes
 
+    def transacoes_hoje(self):
+        hoje = datetime.now().date()
+
+        #Conta o numero de transacoes realizadas hoje
+        return sum(1 for t in self._transacoes if isinstance(t.get("data"), datetime) and t["data"].date() == hoje)
+
     def adicionar_transacao(self, transacao):
         self._transacoes.append(
-        {
+            {
+                "tipo": transacao.__class__.__name__,
+                "valor": transacao.valor,
+                "data": datetime.now(),
+            }
+        )
 
-            "tipo": transacao.__class__.__name__,
-            "valor": transacao.valor,
-        })
-
-
-class Transacao(ABC):
+class Transacao(ABC):        # CLASSE ABSTRATA
     @property
     @abstractproperty
     def valor(valor):
@@ -146,7 +152,7 @@ class Transacao(ABC):
 class Saque(Transacao):
     def __init__(self, valor):
         self._valor = valor
-    
+
     @property
     def valor(self):
         return self._valor
@@ -206,12 +212,29 @@ class Menu:
         print("=" * largura)
 
 
+class TransacaoLog:
+
+    def __init__(self, func):
+        self.func = func
+        functools.update_wrapper(self, self.func)
+
+    def __call__(self, *args, **kwargs):
+        inicio = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        print(f"\n{"-" *50}")
+        print(f"{inicio} INÌCIO | {self.func.__name__.upper()}")
+
+        resultado = self.func(*args, **kwargs)
+
+        return resultado
+
+
 class BancoGeral:            #CLASSE UTILITARIA
     @staticmethod
     def filtrar_clientes(clientes, cpf):
         clientes_filtrados = [cliente for cliente in clientes if cliente.cpf == cpf]
         return clientes_filtrados[0] if clientes_filtrados else None
 
+    @TransacaoLog
     @staticmethod
     def criar_clientes(clientes):
         cpf = input("\nDigite o CPF: ")
@@ -231,6 +254,7 @@ class BancoGeral:            #CLASSE UTILITARIA
         clientes.append(cliente)
         Mensagens.exibir("Cliente cadastrado com sucesso!", titulo="SUCESSO")
 
+    @TransacaoLog
     @staticmethod
     def criar_contas(clientes, contas, numero_conta):
         cpf = input("\nDigite seu CPF: ")
@@ -259,9 +283,15 @@ class BancoGeral:            #CLASSE UTILITARIA
 
     @staticmethod
     def listar_contas(contas):
-        for conta in contas:
-            print("="  * 50)
-            print(str(conta))
+        cpf = input("CPF:")
+
+        if cpf == cliente.cpf in contas:
+            for conta in contas:
+                print("="  * 50)
+                print(str(conta))
+            return
+        else:
+            Mensagens.exibir("Esse CPF não possui conta", titulo="AVISO")
 
     @staticmethod
     def recuperar_conta_cliente(cliente):
@@ -270,6 +300,7 @@ class BancoGeral:            #CLASSE UTILITARIA
         #FIXME - não permite cliente escolher conta
         return cliente.contas[0]
 
+    @TransacaoLog
     @staticmethod
     def depositar(clientes):
         cpf = input("\nInforme seu CPF: ")
@@ -288,8 +319,8 @@ class BancoGeral:            #CLASSE UTILITARIA
         transacao = Deposito(valor)
 
         cliente.realizar_transacao(conta, transacao)
-        Mensagens.exibir(f"Depósito de R${valor:.2f} realizado!", titulo="SUCESSO")
 
+    @TransacaoLog
     @staticmethod
     def sacar(clientes):
         cpf = input("\nDigite seu CPF:")
@@ -310,6 +341,7 @@ class BancoGeral:            #CLASSE UTILITARIA
 
         cliente.realizar_transacao(conta, transacao)
 
+    @TransacaoLog
     @staticmethod
     def extrato(clientes):
         cpf = input("Digite seu CPF: ")
@@ -333,18 +365,20 @@ class BancoGeral:            #CLASSE UTILITARIA
 
         #CABEÇALHO.
         cabecalho = (
-        f"Cliente: {cliente.nome}\n"
-        f"Agência: {conta.agencia} | Conta: {conta.numero}"
+            f"Cliente: {cliente.nome:<20 }\n"
+            f"Agência: {conta.agencia} | Conta: {conta.numero}"
         ).strip()
 
         Mensagens.exibir(cabecalho, titulo="EXTRATO")
 
         for t in transacoes:
-            print(f"{t['tipo']:<10} \tR${t['valor']:>10.2f}")
+            data_formatada = t["data"].strftime("%d/%m/%Y %H:%M")
+            print(f"{t['tipo']:<10} R${t['valor']:>10}   Data: {data_formatada}")
             # tipo à esquerda com 10 colunas; valor à direita com 10 colunas.
 
-        print(f"\nSaldo:{'':<6} R$ {conta.saldo:>10.2f}")
-        print("=" * 50 + "\n")
+        print(f"\n{"=" * 50}")
+        print(f"Saldo atual: R${conta.saldo:.2f}".center(50))
+        print("=" * 50)
 
 
 def main():                  #PROGRAMA PRINCIPAL
